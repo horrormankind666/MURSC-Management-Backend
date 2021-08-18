@@ -2,21 +2,26 @@
 =============================================
 Author      : <ยุทธภูมิ ตวันนา>
 Create date : <๐๒/๐๘/๒๕๖๔>
-Modify date : <๐๒/๐๘/๒๕๖๔>
+Modify date : <๑๘/๐๘/๒๕๖๔>
 Description : <>
 =============================================
 */
 
 const express = require('express');
+const util = require('../util');
+
 const router = express.Router();
 
-const util = require('../util')
 
 class UserSchema {
     constructor(
+        CUID,
         ID,
+        roleName,
+        roleDescription,
+        roleCancelStatus,
+        HRiID,
         username,
-        permission,
         ownerCode,
         fullName,
         email,
@@ -24,9 +29,13 @@ class UserSchema {
         cancelStatus,
         actionDate
     ) {
+        this.CUID = CUID,
         this.ID = ID,
+        this.roleName = roleName,
+        this.roleDescription = roleDescription,
+        this.roleCancelStatus = roleCancelStatus,
+        this.HRiID = HRiID,
         this.username = username,
-        this.permission = permission,
         this.ownerCode = ownerCode,
         this.fullName = fullName,
         this.email = email,
@@ -39,22 +48,26 @@ class UserSchema {
 async function getList() {
     let db = new util.DB(); 
 
-    return db.executeStoredProcedure('sp_finrscGetListAuthorizedUser');
+    return db.executeStoredProcedure('sp_rscGetListAuthorizationUsersByAdmin');
 }
 
 router.get('/GetList', (request, response, next) => {
-    let authorization = new util.Authorization();
-    let authen = authorization.ADFS.isAuthenticated();
+    response.json(request.payload);
 
+    /*
     if (authen.isAuthenticated) {
         getList().then((result) => {
             let ds = []
 
             result.data.forEach(dr => {
                 ds.push(new UserSchema(
+                    util.getCUID([dr.ID, dr.HRiID]),
                     dr.ID,
+                    dr.roleName,
+                    dr.roleDescription,
+                    dr.roleCancelStatus,
+                    dr.HRiID,
                     dr.username,
-                    dr.permission,
 					dr.ownerCode,
                     {
                         th: dr["fullNameTH"],
@@ -72,6 +85,7 @@ router.get('/GetList', (request, response, next) => {
     }
     else
         response.json(util.getAPIMessage(authen.statusCode, [], authen.message));
+    */
 });
 
 module.exports = router;
