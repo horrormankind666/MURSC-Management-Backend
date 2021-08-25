@@ -2,7 +2,7 @@
 =============================================
 Author      : <ยุทธภูมิ ตวันนา>
 Create date : <๐๒/๐๘/๒๕๖๔>
-Modify date : <๑๘/๐๘/๒๕๖๔>
+Modify date : <๑๙/๐๘/๒๕๖๔>
 Description : <>
 =============================================
 */
@@ -22,7 +22,7 @@ const port = process.env.PORT || 5000;
 app.use(cors());
 app.use((request, response, next) => {
     let authorization = new util.Authorization();
-    let authen = authorization.ADFS.get(request);
+    let authen = authorization.ADFS.getInfo(request);
 
     if (authen.isAuthenticated) {
         request.payload = authen.payload;

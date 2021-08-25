@@ -2,12 +2,14 @@
 =============================================
 Author      : <ยุทธภูมิ ตวันนา>
 Create date : <๐๒/๐๘/๒๕๖๔>
-Modify date : <๑๘/๐๘/๒๕๖๔>
+Modify date : <๒๒/๐๘/๒๕๖๔>
 Description : <>
 =============================================
 */
 
+const { response } = require('express');
 const express = require('express');
+const sql = require('mssql');
 const util = require('../util');
 
 const router = express.Router();
@@ -17,13 +19,13 @@ class UserSchema {
     constructor(
         CUID,
         ID,
-        roleName,
-        roleDescription,
-        roleCancelStatus,
+        role,
         HRiID,
         username,
         ownerCode,
         fullName,
+        givenName,
+        familyName,
         email,
         image,
         cancelStatus,
@@ -31,13 +33,13 @@ class UserSchema {
     ) {
         this.CUID = CUID,
         this.ID = ID,
-        this.roleName = roleName,
-        this.roleDescription = roleDescription,
-        this.roleCancelStatus = roleCancelStatus,
+        this.role = role,
         this.HRiID = HRiID,
         this.username = username,
         this.ownerCode = ownerCode,
         this.fullName = fullName,
+        this.givenName = givenName,
+        this.familyName = familyName,
         this.email = email,
         this.image = image,
         this.cancelStatus = cancelStatus,
@@ -45,47 +47,111 @@ class UserSchema {
     }
 }
 
-async function getList() {
+async function getList(ID) {
     let db = new util.DB(); 
+    let connRequest;
+    
+    try {
+        connRequest = await db.getConnectRequest();
+        connRequest.input('ID', sql.VarChar, ID);
+    }
+    catch { }
 
-    return db.executeStoredProcedure('sp_rscGetListAuthorizationUsersByAdmin');
+    return db.executeStoredProcedure('sp_rscGetListAuthorizationUsersByAdmin', connRequest);
+}
+
+async function get(ID, username) {
+    let db = new util.DB(); 
+    let connRequest;
+    
+    try {
+        connRequest = await db.getConnectRequest();
+        connRequest.input('ID', sql.VarChar, ID);
+        connRequest.input('username', sql.VarChar, username);
+    }
+    catch { }
+
+    return db.executeStoredProcedure('sp_rscGetAuthorizationUsers', connRequest);
 }
 
 router.get('/GetList', (request, response, next) => {
-    response.json(request.payload);
+    let ID = request.payload.userID;
 
-    /*
-    if (authen.isAuthenticated) {
-        getList().then((result) => {
-            let ds = []
+    getList(ID).then((result) => {
+        let ds = [];
+        let fullNameSplit = [];
 
-            result.data.forEach(dr => {
-                ds.push(new UserSchema(
-                    util.getCUID([dr.ID, dr.HRiID]),
-                    dr.ID,
-                    dr.roleName,
-                    dr.roleDescription,
-                    dr.roleCancelStatus,
-                    dr.HRiID,
-                    dr.username,
-					dr.ownerCode,
-                    {
-                        th: dr["fullNameTH"],
-                        en: dr["fullNameEN"]
-                    },
-					dr.email,
-					dr.image,
-					dr.cancelStatus,
-					dr.actionDates
-                ));
-            });
+        result.data.forEach(dr => {
+            fullNameSplit = dr["fullNameEN"].split(' ');
 
-            response.json(util.getAPIMessage(response.statusCode, ds, result.message));
+            ds.push(new UserSchema(
+                util.getCUID([dr.ID, dr.HRiID]),
+                dr.ID,
+                {
+                    name: dr.roleName,
+                    description: dr.roleDescription,
+                    cancelStatus: dr.roleCancelStatus
+                },
+                dr.HRiID,
+                dr.username,
+                dr.ownerCode,
+                {
+                    th: dr["fullNameTH"],
+                    en: dr["fullNameEN"]
+                },
+                fullNameSplit[0],
+                fullNameSplit[fullNameSplit.length - 1],
+                dr.email,
+                dr.image,
+                dr.cancelStatus,
+                dr.actionDates
+            ));
         });
-    }
-    else
-        response.json(util.getAPIMessage(authen.statusCode, [], authen.message));
-    */
+
+        response.json(util.getAPIMessage(response.statusCode, ds, result.message));
+    });
+});
+
+router.get('/Get', (request, response, next) => {
+    let ID = request.payload.userID;
+    let username = request.payload.winaccountname;
+
+    get(ID, username).then((result) => {
+        let ds = [];
+        let dr = {};
+        let fullNameSplit = [];
+        
+        if (result.data.length > 0) {
+            dr = result.data[0];
+            fullNameSplit = dr["fullNameEN"].split(' ');
+
+
+            ds.push(new UserSchema(
+                util.getCUID([dr.ID, dr.HRiID]),
+                dr.ID,
+                {
+                    name: dr.roleName,
+                    description: dr.roleDescription,
+                    cancelStatus: dr.roleCancelStatus
+                },
+                dr.HRiID,
+                dr.username,
+                dr.ownerCode,
+                {
+                    th: dr["fullNameTH"],
+                    en: dr["fullNameEN"]
+                },
+                fullNameSplit[0],
+                fullNameSplit[fullNameSplit.length - 1],
+                dr.email,
+                dr.image,
+                dr.cancelStatus,
+                dr.actionDates
+            ));
+        }
+
+        response.json(util.getAPIMessage(response.statusCode, ds, result.message));
+    });
 });
 
 module.exports = router;

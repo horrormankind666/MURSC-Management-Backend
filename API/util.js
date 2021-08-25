@@ -2,12 +2,13 @@
 =============================================
 Author      : <ยุทธภูมิ ตวันนา>
 Create date : <๐๒/๐๘/๒๕๖๔>
-Modify date : <๑๘/๐๘/๒๕๖๔>
+Modify date : <๒๓/๐๘/๒๕๖๔>
 Description : <>
 =============================================
 */
 
 const btoa = require('btoa');
+const atob = require('atob');
 const sql = require('mssql');
 const jwt = require('jsonwebtoken');
 const fs = require('fs');
@@ -60,10 +61,18 @@ class DB {
         } 
     }
 
-    async executeStoredProcedure(spName) {
+    async getConnectRequest() {
         try {
             let conn = await sql.connect(this.config);
-            let ds = await conn.request().execute(spName);
+
+            return conn.request();
+        }
+        catch { }
+    }
+
+    async executeStoredProcedure(spName, request) {
+        try {
+            let ds = await request.execute(spName);
 
             return {
                 data: ds.recordset,
@@ -80,35 +89,95 @@ class DB {
 
 class Authorization {
     ADFS = {
-        get(request) {
+        parserCUID(str) {
+            try {
+                let strDecode = atob(str);
+                let strDecodeSplit = strDecode.split('.');
+                let data = strDecodeSplit[2];
+                let dataReverse = data.split('').reverse().join('');
+                let dataReverseDecode = atob(dataReverse);
+                let dataReverseDecodeSplit = dataReverseDecode.split('.');
+        
+                return ({
+                    userID: dataReverseDecodeSplit[0],
+                    HRiID: dataReverseDecodeSplit[1]
+                });
+            }
+            catch {
+                return null;
+            }
+        },
+        parserToken(str) {
+            try {
+                let strDecode = atob(str);
+                let strDecodeSplit = strDecode.split('.');
+                let CUIDInfo = this.parserCUID(atob(strDecodeSplit[0]).split('').reverse().join(''));
+                let tokenParse = CUIDInfo;
+
+                tokenParse.token = atob(strDecodeSplit[1]).split('').reverse().join('');
+
+                return tokenParse;
+            }
+            catch {
+                return null;
+            }
+        },
+        getInfo(request) {
             let authorization = request.headers.authorization;
+            let statusCode = 200;
             let isAuthenticated = false;
-            let token = '';
             let payload = {};
             let message = '';
-
+            
             if (authorization) {
                 if (authorization.startsWith("Bearer ")) {
-                    token = authorization.substring("Bearer ".length).trim();
-
+                    let bearerToken = authorization.substring("Bearer ".length).trim();
+                    let bearerTokenInfo = this.parserToken(bearerToken);
                     let publickey = fs.readFileSync(__dirname + '/public.key');
-
+                    
                     try {
-                        payload = jwt.verify(token, publickey, { algorithms: ['RS256'] });
-                        isAuthenticated = true;
+                        payload = jwt.verify(bearerTokenInfo.token, publickey, { algorithms: ['RS256'] });
+
+                        if (bearerTokenInfo.HRiID === payload.ppid) {
+                            statusCode = 200;
+                            isAuthenticated = true;
+                            payload.userID = bearerTokenInfo.userID;
+                            message = 'OK';
+                        }
+                        else {
+                            statusCode = 404;
+                            isAuthenticated = false;
+                            message = 'Not Found';
+                        }
                     }
                     catch(error) {
-                        message = error;
+                        statusCode = 401;
+                        isAuthenticated = false;
+    
+                        if (error.name === 'TokenExpiredError')
+                            message = 'Token Expired';
+                        else
+                            message = 'Token Invalid';
                     }
                 }
+                else {
+                    statusCode = 401;
+                    isAuthenticated = false;
+                    message = 'Unauthorized';
+                }
+            }
+            else {
+                statusCode = 401;
+                isAuthenticated = false;
+                message = 'Unauthorized';
             }
 
             return {
-                statusCode: (isAuthenticated ? 200 : 401),
+                statusCode: statusCode,
                 isAuthenticated: isAuthenticated,
                 payload: payload,
-                message: (isAuthenticated ? 'OK' : (message ? message : 'Unauthorized'))
-            }
+                message: message
+            };
         }
     };
 }
